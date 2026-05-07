@@ -1,0 +1,40 @@
+{
+  "name": "redis-stream-producer-consumer",
+  "version": "0.1.0",
+  "description": "Tiny TypeScript wrapper over Redis Streams: typed Producer + Consumer with injected client.",
+  "type": "module",
+  "main": "./dist/cjs/index.cjs",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.cts",
+        "default": "./dist/cjs/index.cjs"
+      }
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build:esm": "tsc -p tsconfig.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json && node scripts/rename-cjs.mjs",
+    "build": "npm run clean && npm run build:esm && npm run build:cjs",
+    "test": "node --test --import tsx test/*.test.ts",
+    "test:integration": "node --test --import tsx test/integration.test.ts",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "engines": { "node": ">=18" },
+  "keywords": ["redis", "streams", "producer", "consumer", "typescript", "xadd", "xreadgroup"],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "ioredis": "^5.4.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}
