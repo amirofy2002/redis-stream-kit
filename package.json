@@ -1,5 +1,5 @@
 {
-  "name": "redis-stream-producer-consumer",
+  "name": "redis-stream-kit",
   "version": "0.1.0",
   "description": "Tiny TypeScript wrapper over Redis Streams: typed Producer + Consumer with injected client.",
   "type": "module",
@@ -18,7 +18,11 @@
       }
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "clean": "rm -rf dist",
     "build:esm": "tsc -p tsconfig.json",
@@ -28,8 +32,18 @@
     "test:integration": "node --test --import tsx test/integration.test.ts",
     "prepublishOnly": "npm run build && npm test"
   },
-  "engines": { "node": ">=18" },
-  "keywords": ["redis", "streams", "producer", "consumer", "typescript", "xadd", "xreadgroup"],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "redis",
+    "streams",
+    "producer",
+    "consumer",
+    "typescript",
+    "xadd",
+    "xreadgroup"
+  ],
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.11.0",
