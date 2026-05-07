@@ -114,3 +114,29 @@ test('concurrency: runs N workers in parallel', async () => {
   await c.stop();
   assert.ok(inFlight.max >= 2, `expected concurrent execution, max=${inFlight.max}`);
 });
+
+test('autoClaim: periodically claims stale messages', async () => {
+  const claimReply: unknown = ['0-0', [['9-0', ['foo', '"claimed"']]], []];
+  let claimCount = 0;
+  const client: RedisLike = {
+    xadd: async () => '1-0',
+    xreadgroup: async () => null,
+    xack: async () => 1,
+    xgroup: async () => 'OK',
+    xautoclaim: async () => { claimCount++; return claimReply; },
+  };
+  const seen: unknown[] = [];
+  const c = new Consumer<{ foo: string }>(
+    client, 's', 'g',
+    async (data) => { seen.push(data); },
+    {
+      blockMs: 5, shutdownMs: 300,
+      autoClaim: { idleMs: 1000, intervalMs: 30 },
+    },
+  );
+  await c.start();
+  await new Promise((r) => setTimeout(r, 80));
+  await c.stop();
+  assert.ok(claimCount >= 1, 'XAUTOCLAIM was called at least once');
+  assert.deepEqual(seen[0], { foo: 'claimed' });
+});

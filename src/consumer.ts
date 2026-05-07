@@ -62,6 +62,9 @@ export class Consumer<T = unknown> extends EventEmitter {
     for (let i = 0; i < this.opts.concurrency; i++) {
       this.workers.push(this.runWorker());
     }
+    if (this.opts.autoClaim) {
+      this.workers.push(this.runAutoClaim());
+    }
   }
 
   async stop(): Promise<void> {
@@ -110,6 +113,30 @@ export class Consumer<T = unknown> extends EventEmitter {
         for (const [id, fields] of entries) {
           await this.dispatch(id, fields, 1);
         }
+      }
+    }
+  }
+
+  private async runAutoClaim(): Promise<void> {
+    const ac = this.opts.autoClaim!;
+    let cursor = '0-0';
+    while (this.running) {
+      await this.sleep(ac.intervalMs);
+      if (!this.running) return;
+      try {
+        const result = (await this.client.xautoclaim(
+          this.stream, this.group, this.consumerName,
+          ac.idleMs, cursor, 'COUNT', this.opts.batchSize,
+        )) as [string, [string, string[]][], string[]] | null;
+        if (!result) continue;
+        const [nextCursor, claimed] = result;
+        cursor = nextCursor || '0-0';
+        for (const [id, fields] of claimed) {
+          this.emit('claim', id);
+          await this.dispatch(id, fields, 2);
+        }
+      } catch (err) {
+        this.opts.logger?.warn('XAUTOCLAIM failed', err);
       }
     }
   }
