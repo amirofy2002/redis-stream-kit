@@ -93,3 +93,24 @@ test('decode failure routed through onError', async () => {
   assert.match((errors[0] as Error).message, /JSON|decode/);
   assert.equal(acks.length, 0);
 });
+
+test('concurrency: runs N workers in parallel', async () => {
+  const inFlight = { now: 0, max: 0 };
+  const reply = (id: string): XReadGroupReply => [['s', [[id, ['x', '1']]]]];
+  const replies: XReadGroupReply[] = [reply('1-0'), reply('2-0'), reply('3-0'), null, null, null];
+  const { client } = makeClient(replies);
+
+  const c = new Consumer(client, 's', 'g',
+    async () => {
+      inFlight.now++;
+      inFlight.max = Math.max(inFlight.max, inFlight.now);
+      await new Promise((r) => setTimeout(r, 30));
+      inFlight.now--;
+    },
+    { blockMs: 5, shutdownMs: 300, concurrency: 3 },
+  );
+  await c.start();
+  await new Promise((r) => setTimeout(r, 80));
+  await c.stop();
+  assert.ok(inFlight.max >= 2, `expected concurrent execution, max=${inFlight.max}`);
+});
