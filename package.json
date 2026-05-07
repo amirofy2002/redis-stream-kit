@@ -1,6 +1,6 @@
 {
   "name": "redis-stream-kit",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Tiny TypeScript wrapper over Redis Streams: typed Producer + Consumer with injected client.",
   "type": "module",
   "main": "./dist/cjs/index.cjs",
@@ -45,6 +45,14 @@
     "xreadgroup"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amirofy2002/redis-stream-kit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/amirofy2002/redis-stream-kit/issues"
+  },
+  "homepage": "https://github.com/amirofy2002/redis-stream-kit#readme",
   "devDependencies": {
     "@types/node": "^20.11.0",
     "ioredis": "^5.4.0",
