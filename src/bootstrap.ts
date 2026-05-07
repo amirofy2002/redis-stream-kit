@@ -8,7 +8,7 @@ export async function ensureGroup(
   try {
     await client.xgroup('CREATE', stream, group, '$', 'MKSTREAM');
   } catch (err) {
-    const msg = (err as Error).message ?? '';
+    const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes('BUSYGROUP')) return;
     throw err;
   }

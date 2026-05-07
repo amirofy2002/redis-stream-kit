@@ -20,6 +20,7 @@ export class Consumer<T = unknown> extends EventEmitter {
   private running = false;
   private workers: Promise<void>[] = [];
   private abort = new AbortController();
+  private fatalError?: unknown;
   private readonly consumerName: string;
   private readonly opts: Required<Omit<ConsumerOptions<T>, 'onError' | 'autoClaim' | 'logger' | 'consumerName'>> & {
     onError?: ErrorHandler<T>;
@@ -59,16 +60,22 @@ export class Consumer<T = unknown> extends EventEmitter {
     if (this.opts.createIfMissing) {
       await ensureGroup(this.client, this.stream, this.group);
     }
+    const wrap = (p: Promise<void>): Promise<void> => p.catch((err) => {
+      this.fatalError = err;
+      if (this.listenerCount('error') > 0) this.emit('error', err);
+      this.running = false;
+      this.abort.abort();
+    });
     for (let i = 0; i < this.opts.concurrency; i++) {
-      this.workers.push(this.runWorker());
+      this.workers.push(wrap(this.runWorker()));
     }
     if (this.opts.autoClaim) {
-      this.workers.push(this.runAutoClaim());
+      this.workers.push(wrap(this.runAutoClaim()));
     }
   }
 
   async stop(): Promise<void> {
-    if (!this.running) return;
+    if (!this.running && !this.fatalError) return;
     this.running = false;
     this.abort.abort();
     let timer: NodeJS.Timeout | undefined;
@@ -81,6 +88,11 @@ export class Consumer<T = unknown> extends EventEmitter {
       this.opts.logger?.warn('consumer shutdown forced', err);
     } finally {
       if (timer) clearTimeout(timer);
+    }
+    if (this.fatalError) {
+      const err = this.fatalError;
+      this.fatalError = undefined;
+      throw err;
     }
   }
 
@@ -96,7 +108,7 @@ export class Consumer<T = unknown> extends EventEmitter {
         )) as XStream | null;
       } catch (err) {
         if (!this.running) return;
-        const msg = (err as Error).message ?? '';
+        const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes('NOGROUP')) {
           this.emit('error', err);
           throw err;
@@ -132,7 +144,6 @@ export class Consumer<T = unknown> extends EventEmitter {
         const [nextCursor, claimed] = result;
         cursor = nextCursor || '0-0';
         for (const [id, fields] of claimed) {
-          this.emit('claim', id);
           await this.dispatch(id, fields, 2);
         }
       } catch (err) {
@@ -145,6 +156,7 @@ export class Consumer<T = unknown> extends EventEmitter {
     const meta: MessageMeta = {
       id, attempt, stream: this.stream, group: this.group, consumer: this.consumerName,
     };
+    if (attempt > 1) this.emit('claim', id, meta);
     let data: T;
     try {
       data = decode(fields) as T;
@@ -155,10 +167,16 @@ export class Consumer<T = unknown> extends EventEmitter {
     this.emit('message', data, meta);
     try {
       await this.handler(data, meta);
+    } catch (err) {
+      await this.runOnError(err, data, meta);
+      return;
+    }
+    try {
       await this.client.xack(this.stream, this.group, id);
       this.emit('ack', id, meta);
     } catch (err) {
-      await this.runOnError(err, data, meta);
+      this.opts.logger?.warn('XACK failed', err);
+      if (this.listenerCount('error') > 0) this.emit('error', err, meta);
     }
   }
 
@@ -176,8 +194,14 @@ export class Consumer<T = unknown> extends EventEmitter {
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => {
-      const t = setTimeout(resolve, ms);
-      this.abort.signal.addEventListener('abort', () => { clearTimeout(t); resolve(); }, { once: true });
+      const signal = this.abort.signal;
+      if (signal.aborted) return resolve();
+      const onAbort = () => { clearTimeout(t); resolve(); };
+      const t = setTimeout(() => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      signal.addEventListener('abort', onAbort, { once: true });
     });
   }
 }

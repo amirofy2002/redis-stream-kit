@@ -14,8 +14,6 @@ export interface Logger {
 
 export interface ProducerOptions {
   maxLen?: number;
-  createIfMissing?: boolean;
-  logger?: Logger;
 }
 
 export interface MessageMeta {

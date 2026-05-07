@@ -40,7 +40,7 @@ await consumer.start();
 
 ### `new Producer<T>(client, stream, options?)`
 
-Options: `{ maxLen?: number; createIfMissing?: boolean; logger? }`.
+Options: `{ maxLen?: number }`.
 
 - `start()` — no-op marker; safe to call.
 - `emit(payload)` — `XADD`, returns the message ID.

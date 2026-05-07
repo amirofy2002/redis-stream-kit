@@ -115,6 +115,47 @@ test('concurrency: runs N workers in parallel', async () => {
   assert.ok(inFlight.max >= 2, `expected concurrent execution, max=${inFlight.max}`);
 });
 
+test('emits message and ack events on success', async () => {
+  const reply: XReadGroupReply = [['s', [['7-0', ['v', '"hi"']]]]];
+  const { client } = makeClient([reply, null]);
+  const messages: unknown[] = [];
+  const acks: unknown[] = [];
+  const c = new Consumer<{ v: string }>(
+    client, 's', 'g', async () => {},
+    { blockMs: 10, shutdownMs: 200 },
+  );
+  c.on('message', (data, meta) => messages.push({ data, id: (meta as { id: string }).id }));
+  c.on('ack', (id, meta) => acks.push({ id, hasMeta: !!meta }));
+  await c.start();
+  await new Promise((r) => setTimeout(r, 50));
+  await c.stop();
+  assert.deepEqual(messages[0], { data: { v: 'hi' }, id: '7-0' });
+  assert.deepEqual(acks[0], { id: '7-0', hasMeta: true });
+});
+
+test('emits claim event with meta on autoClaimed message', async () => {
+  const claimReply: unknown = ['0-0', [['8-0', ['k', '"v"']]], []];
+  const client: RedisLike = {
+    xadd: async () => '1-0',
+    xreadgroup: async () => null,
+    xack: async () => 1,
+    xgroup: async () => 'OK',
+    xautoclaim: async () => claimReply,
+  };
+  const claims: { id: string; attempt: number }[] = [];
+  const c = new Consumer<{ k: string }>(
+    client, 's', 'g', async () => {},
+    { blockMs: 5, shutdownMs: 300, autoClaim: { idleMs: 10, intervalMs: 20 } },
+  );
+  c.on('claim', (id, meta) => claims.push({ id, attempt: (meta as { attempt: number }).attempt }));
+  await c.start();
+  await new Promise((r) => setTimeout(r, 80));
+  await c.stop();
+  assert.ok(claims.length >= 1);
+  assert.equal(claims[0]?.id, '8-0');
+  assert.equal(claims[0]?.attempt, 2);
+});
+
 test('autoClaim: periodically claims stale messages', async () => {
   const claimReply: unknown = ['0-0', [['9-0', ['foo', '"claimed"']]], []];
   let claimCount = 0;
